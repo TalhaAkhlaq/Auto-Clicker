@@ -2,95 +2,92 @@ import pyautogui
 import threading
 from pynput import keyboard
 import time
-import sys
+import sys  
+
+refresh_button = None
+register_button = None
+pixel_position = None
+refresh_page_button = None
 
 pyautogui.PAUSE = 0
 
 active = False
 
-move_duration = 0.5
+def color_difference(color1, color2):
+    """Calculate the Euclidean distance between two RGB colors."""
+    return sum((a - b) ** 2 for a, b in zip(color1, color2)) ** 0.5
 
-def move_mouse(pos1, pos2):
-    """
-    Thread function that continuously moves the mouse between two positions.
-    This function checks the global 'active' flag to determine whether to move the mouse,
-    allowing for dynamic start/pause without stopping the thread.
-
-    Parameters:
-    - pos1: Tuple of the first position (x, y).
-    - pos2: Tuple of the second position (x, y).
-    """
-    global active, move_duration
+def click_loop():
+    """Continuously click two specified buttons on the screen with minimal delay."""
     while True:
         if active:
-            pyautogui.moveTo(pos1[0], pos1[1], duration=move_duration)
-            time.sleep(0.2)
-            pyautogui.moveTo(pos2[0], pos2[1], duration=move_duration)
-            time.sleep(0.2)
+            pyautogui.click(refresh_button)
+            pyautogui.click(register_button)
         else:
-            time.sleep(0.1)
+            time.sleep(0.1)  
 
-
-def adjust_speed(key):
-    """
-    Adjust the speed of the mouse movement by changing the move duration based on keyboard input.
-    Decreasing the duration results in faster movement, and increasing it results in slower movement.
-
-    Parameter:
-    - key: The key pressed; this function handles up and down arrow keys.
-    """
-    global move_duration
-    if key == keyboard.Key.up and move_duration > 0.1:
-        move_duration -= 0.1
-        print(f"Speed increased, current duration: {move_duration:.1f}s")
-    elif key == keyboard.Key.down and move_duration < 1.0:
-        move_duration += 0.1
-        print(f"Speed decreased, current duration: {move_duration:.1f}s")
-
+def monitor_pixel():
+    """Monitor a pixel for color changes and click a button if a change is detected."""
+    global pixel_position, refresh_page_button
+    initial_color = pyautogui.pixel(pixel_position[0], pixel_position[1])
+    while True:
+        if active:
+            current_color = pyautogui.pixel(pixel_position[0], pixel_position[1])
+            if color_difference(current_color, initial_color) > 10:
+                pyautogui.click(refresh_page_button)  
+                while color_difference(pyautogui.pixel(pixel_position[0], pixel_position[1]), initial_color) > 10:
+                    time.sleep(0.1)
+                initial_color = pyautogui.pixel(pixel_position[0], pixel_position[1])
 
 def on_press(key):
-    """
-    Handles keyboard inputs to control the mouse jiggler.
-    's' toggles the jiggle on or off.
-    'q' quits the application.
-    Arrow keys adjust the jiggle speed.
-
-    Parameter:
-    - key: The key event captured by the listener.
-    """
+    """Handle keyboard inputs to control the automation."""
     global active
+    if key == keyboard.Key.esc:
+        return  
     try:
-        if hasattr(key, "char"):
-            if key.char == "s":
+        if hasattr(key, 'char'):
+            if key.char == 's':
                 active = not active
-                print("Mouse jiggler started." if active else "Mouse jiggler paused.")
-            elif key.char == "q":
-                print("Mouse jiggler ended.")
+                print("Program started." if active else "Program paused.")
+            elif key.char == 'q':
+                print("Quit command received, stopping the program...")
                 sys.exit(0)
-        else:
-            adjust_speed(key)
+            elif key.char == 'r':
+                if active:  
+                    active = False
+                    print("Program paused for resetting...")
+                print("Resetting setup...")
+                setup_positions()  
     except AttributeError:
-        pass
+        pass  
 
+def setup_positions():
+    """Set up positions for mouse actions by user input, only Enter key confirms positions."""
+    global refresh_button, register_button, pixel_position, refresh_page_button
+    input("Hover over the Refresh button and press Enter to confirm.")
+    refresh_button = pyautogui.position()
+    input("Hover over the Register Now button and press Enter to confirm.")
+    register_button = pyautogui.position()
+    input("Hover over the pixel to monitor and press Enter to confirm.")
+    pixel_position = pyautogui.position()
+    input("Hover over the Refresh Page button and press Enter to confirm.")
+    refresh_page_button = pyautogui.position()
+    print("Setup complete. Press 's' to start/pause the automation, 'r' to redo setup, and 'q' to quit the program.")
 
 def main():
-    print("Hover over the first position for the mouse and press Enter.")
-    input()
-    pos1 = pyautogui.position()
-
-    print("Hover over the second position for the mouse and press Enter.")
-    input()
-    pos2 = pyautogui.position()
-
-    move_thread = threading.Thread(target=move_mouse, args=(pos1, pos2), daemon=True)
-    move_thread.start()
+    """Initialize the program by setting up positions and starting threads."""
+    setup_positions()
+    click_thread = threading.Thread(target=click_loop, daemon=True)
+    pixel_thread = threading.Thread(target=monitor_pixel, daemon=True)
+    click_thread.start()
+    pixel_thread.start()
 
     listener = keyboard.Listener(on_press=on_press)
     listener.start()
     listener.join()
 
-    print("Mouse jiggler has ended.")
-
-
 if __name__ == "__main__":
     main()
+    
+    
+    
